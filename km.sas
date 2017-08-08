@@ -38,6 +38,124 @@ keep prof_id cust_dim_nb &login_var. ;
 run;
 
 
+/*outlier*/
+
+/*
+Outliers include:
+1.likely aggregators
+2.outlier based on distance measures
+*/
+
+
+/*filter out likely aggregators -- freq_per_day > 3.5*/
+data mob_metrics ;
+set datadir.txn_mob_metrics_2015q4 ;
+where freq_per_day <= 3.5 and day_active > 1 ;
+z_day = day_active ;
+z_txn = sum_all ;
+l_day = log(day_active) ;
+l_txn = log(sum_all) ;
+zl_day = log(day_active) ;
+zl_txn = log(sum_all) ;
+run;
+
+/*standardize the variables*/
+proc standard data = mob_metrics
+			  out = z_metrics
+			  mean = 0 std = 1 ;
+var z_day z_txn zl_day zl_txn ;
+run;
+
+proc means data = z_metrics 
+descend n mean std min p1 p5 p10 q1 median q3 p90 p95 p99 max;
+var z_day z_txn l_day l_txn zl_day zl_txn ;
+run;
+
+/*Preliminary Analysis -- proc fastclus with 20 Clusters*/
+proc fastclus data = z_metrics 
+			  outseed = mean1 
+			  maxc = 20 
+			  maxiter = 0 
+			  summary;
+var z_day z_txn ;
+run;
+
+proc sgscatter data = mean1;
+compare y = (_gap_ _radius_) x = _freq_;
+run;
+
+
+
+/*remove low frequency clusters*/
+/*
+data seed;
+set mean1;
+if _freq_ > 1000;
+run;
+*/
+/*selecting seeds from the high frequency clusters in the previous analysis*/
+/*option least = 1 -- minimize the mean abs. diff btw the data and the corresponding cluster medians*/
+/*prevents an observation from being assigned to a cluster*/ 
+/*if its distance to the nearest cluster seed exceeds the value of the STRICT= option*/
+proc fastclus data = z_metrics 
+/*			  seed = seed */
+			  maxc = 4 
+			  strict = 3.0 
+/*			  least = 1 */
+			  out = out
+			  outseed = mean2;
+var zl_day zl_txn ;
+run;
+
+proc freq data = out;
+table cluster / list missing;
+run;
+proc means data = out n mean std min q1 median q3 p90 p95 p99 max;
+var day_active sum_all freq_per_day;
+class cluster;
+run;
+
+
+data for_plot;
+set out;
+ransel  = ranuni(246)*1000;
+if ransel <= 100 then output;
+run;
+proc sgplot data = for_plot;
+scatter y = zl_day x = zl_txn / group = cluster markerattrs=(symbol=circleFilled);
+run;
+
+
+
+
+
+/*final clustering with zero iterations to assign outliers and tails to clusters*/
+/*
+proc fastclus data = z_metrics 
+			  seed = mean2 
+			  maxc = 4 
+			  maxiter=0 
+			  out = out;
+var z_day z_txn ;
+run;
+
+proc freq data = out;
+table cluster / list missing;
+run;
+
+data for_plot;
+set out;
+ransel  = ranuni(246)*1000;
+if ransel <= 100 then output;
+run;
+proc sgplot data = for_plot;
+scatter y = day_active x = sum_all / group = cluster;
+run;
+*/
+
+
+
+
 
 
 /*2 factors*/
