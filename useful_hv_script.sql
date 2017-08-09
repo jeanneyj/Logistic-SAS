@@ -71,4 +71,50 @@ set mapred.job.queue.name=da_adhoc;
 set hive.execution.engine=mr;
 
 
+-------------load data into hive table----------------
+CREATE TABLE da.t_dim_country_code
+(
+code_2l STRING,
+code_3l STRING,
+country_name STRING
+)
+COMMENT 'Wire Country Code Lookup'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+LINES  TERMINATED BY '\n'
+tblproperties("skip.header.line.count"="1")
+;
+ 
+ 
+-- You have to put the .txt data at the designated location before you run the load data command in HIVE.
+load data local inpath '/home/f559934/wire/Country_Code_Lookup.txt' into table da.t_dim_country_code;
+
+
+
+------------------------select most recent record-----------------------------
+-- In HIVE & DB2
+select * from
+(
+    select
+     ...
+     ROW_NUMBER() OVER(PARTITION BY PYMT_ID ORDER BY TRAN_DT DESC, TRAN_TM DESC)  as rank
+) as temp
+where rank = 1
+ 
+ 
+-- In Teradata (aka.ICDW)
+ select
+     ...
+ from table A
+ QUALIFY ROW_NUMBER() OVER(PARTITION BY PYMT_ID ORDER BY TRAN_DT DESC, TRAN_TM DESC) = 1
+ 
+
+-----------------export hive table to csv/txt file-------------------
+# in command line
+hive -e 'set hive.cli.print.header=true; select * from i637308.chk_qd_cmplt_rate;' > test.csv
+# specify the delimiter to be '|'
+hive -e 'set hive.cli.print.header=true; select * from i637308.chk_qd_cmplt_rate;' | sed 's/[|]/,/g' > test.txt
+
+
+
 
